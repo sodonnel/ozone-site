@@ -254,7 +254,7 @@ Due to the reduced load on a decommissioning host, it is possible to increase th
 
 When a Datanode switches to a decommissioning state, it will adjust the size of the replication supervisor thread pool higher, and if the node returns to the In Service state, it will return to the lower thread pool limit.
 
-Similarly when scheduling commands, SCM can allocate more commands to the decommissioning host, as it should process them more quickly due to the lower load and increased threadpool.
+Similarly when scheduling commands, SCM can allocate more commands to the decommissioning host, as it should process them more quickly due to the lower load and increased thread pool.
 
 ### Global Replication Command Limit
 
