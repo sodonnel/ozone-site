@@ -8,9 +8,9 @@ The RM process is split into stages - one to check containers and identify those
 
 ### Container Check Stage
 
-The check phase runs periodically at 5 minute intervals. First it gathers a list of all containers on the cluster, and each container is passed through a chain of rules to identify if it has any problems. These rules are arranged in a similar way to the “Chain of Responsibility” design pattern, where the first rule which “matches” causes the chain to exit. Each type of check is implemented in a standalone java class, and the checks are processed in a defined order:
+The check phase runs periodically at 5 minute intervals. First it gathers a list of all containers on the cluster, and each container is passed through a chain of rules to identify if it has any problems. These rules are arranged in a similar way to the “Chain of Responsibility” design pattern, where the first rule which “matches” causes the chain to exit. Each type of check is implemented in a standalone Java class, and the checks are processed in a defined order:
 
-```
+```java
 containerCheckChain = new OpenContainerHandler(this);
 containerCheckChain
    .addNext(new ClosingContainerHandler(this, clock))
@@ -25,13 +25,14 @@ containerCheckChain
    .addNext(new RatisUnhealthyReplicationCheckHandler())
    .addNext(new VulnerableUnhealthyReplicasHandler(this));
 ```
+
 ## ReplicationManager Report
 
 Each time the check phase of the Replication Manager runs, it generates a report which can be accessed via the command “ozone admin container report”. This report provides details of all containers in the cluster which have an issue to be corrected by the Replication Manager.
 
 The output of the command looks as follows:
 
-```
+```text
 # ozone admin container report
 Container Summary Report generated at 2023-08-14T13:01:43Z
 ==========================================================
@@ -61,7 +62,7 @@ QUASI_CLOSED_STUCK: 0
 
 
 First 100 UNDER_REPLICATED containers:
-#1001, #2003, #4001, #4002, #4004, #4005, #5002, #6006, #6009, #7003, #7006, #9004, #9006, #10002, #11001, #14004, #16004, #16007, #17002, #20003, #21001, #23003, #23008, #24005, #24008, #24010, #24012, #25003, #26002, #30004, #30007, #33001, #34004, #36002, #36007, #37002, #38003, #38004, #39002, #43001, #43003, #43004, #43008, #44003, #44004, #45003, #46001, #46002, #48001, #48002, #52001, #52003, #53002, #53003, #56007, #59001, #60001, #61004, #61006, #62003, #65001, #69002, #70004, #71001, #72001, #73001, #74003, #74004, #75001
+#1001, #2003, #4001, #4002, #4004, #4005, #5002, #6006, #6009, #7003, #7006, #9004, #9006, #10002, #11001
 
 
 First 100 MISSING containers:
@@ -126,7 +127,7 @@ A container is missing if there are not enough replicas available to read it. Fo
 
 #### Unhealthy
 
-A container is unhealthy, if it is not missing and there are insufficient healthy replicas to allow the container to be read completely. 
+A container is unhealthy, if it is not missing and there are insufficient healthy replicas to allow the container to be read completely.
 
 A replica can get marked as unhealthy by the scanner process on the Datanode for various reasons. For example, it can detect if a block in the container has an invalid checksum and mark the replica unhealthy. For a Ratis container, it will be marked as unhealthy if all its container replicas are unhealthy with no healthy replicas available. Note that it may be possible to read most of the data in an unhealthy container. For Ratis, each replica could have a different problem affecting a different block in each replica, for example a checksum violation on read. The Ozone client would catch the read error and try the read again from another replica. However data recovery will depend on the number and level of corruption, and whether the same blocks are corrupted in all replicas.
 
@@ -136,16 +137,16 @@ A Ratis container with 3 replicas, Healthy, Healthy, Unhealthy is still fully re
 
 #### Unhealthy EC
 
-EC containers are similar. They are only marked unhealthy if they are not missing (at least data number of replicas available), but there isn’t at least “data number” of healthy replicas. See the following tables for examples: 
+EC containers are similar. They are only marked unhealthy if they are not missing (at least data number of replicas available), but there isn’t at least “data number” of healthy replicas. See the following tables for examples:
 
 | Index = 1 | Index = 2            | Index = 3 | Index = 4 | Index = 5 | State     |
 | --------- | -------------------- | --------- | --------- | --------- | --------- |
-| Healthy   | Healthy              | Healthy   | Unhealthy | Unhealthy | Under-Rep | 
-| Healthy   | Healthy              | Healthy   |           |           | Under-Rep | 
-| Healthy   | Healthy              | Unhealthy |           |           | Unhealthy | 
-| Healthy   | Healthy              |           |           |           | Missing   | 
-| Healthy   | Healthy + Unhealthy  |           |           |           | Missing and Over Replicated | 
-| Healthy   | Healthy + Unhealthy  | Healthy   |           |           | Under and Over Replicated | 
+| Healthy   | Healthy              | Healthy   | Unhealthy | Unhealthy | Under-Rep |
+| Healthy   | Healthy              | Healthy   |           |           | Under-Rep |
+| Healthy   | Healthy              | Unhealthy |           |           | Unhealthy |
+| Healthy   | Healthy              |           |           |           | Missing   |
+| Healthy   | Healthy + Unhealthy  |           |           |           | Missing and Over Replicated |
+| Healthy   | Healthy + Unhealthy  | Healthy   |           |           | Under and Over Replicated |
 
 Note it is possible for an EC container to be both Unhealthy and Over Replicated, as there may be two copies of the same index, one healthy and one unhealthy.
 
@@ -197,7 +198,7 @@ Note there are two types of replication commands - simple replication and EC Rec
 
 #### The Balancer and Low Priority Commands
 
-The Balancer process also sends replicate commands via the Replication Manager API to even out the space used on nodes across the cluster. The Balancer works using the concept of an iteration. It assesses the state of the cluster and decides which nodes are over and under utilized. Then it schedules a large number of move commands to move data from the overused nodes to underused nodes. These commands are scheduled on the Datanodes, initially as Replicate Container Commands, and as they complete as Delete Container Replica commands. 
+The Balancer process also sends replicate commands via the Replication Manager API to even out the space used on nodes across the cluster. The Balancer works using the concept of an iteration. It assesses the state of the cluster and decides which nodes are over and under utilized. Then it schedules a large number of move commands to move data from the overused nodes to underused nodes. These commands are scheduled on the Datanodes, initially as Replicate Container Commands, and as they complete as Delete Container Replica commands.
 
 This can create a large number of commands on the Datanode queues and may also impact the more important replication of containers if some nodes go offline. To combat this, the Replicate Container Commands can be sent with two priorities - Normal and Low. The Balancer always sends Low priority Replicate Container commands, while Replication Manager always sends Normal priority commands. Low priority commands do not count toward the queue size reported in the Datanode heartbeat. If the Datanode has Normal priority commands queued, the Low priority commands will not be processed. That way, if there is a large amount of Balancer work scheduled, and some essential replication work is required, it will get priority.
 
@@ -259,7 +260,7 @@ Similarly when scheduling commands, SCM can allocate more commands to the decomm
 
 As well as the above Datanode limits, it is possible to configure a global replication limit, limiting the number of inflight containers pending creation. A larger cluster would be capable of having more inflight replication than a smaller cluster, so the limit should be a function of the number of Datanodes on the cluster, and the limit of the number of commands which can be queued per Datanode and some weighting factor.
 
-For example, if each Datanode can queue 20 replication commands, and there are 100 nodes in the cluster, then the natural limit is 20 * 100. However, that assumes that commands are queued evenly across all Datanodes, which is unlikely. With a global limit we would prefer that all Datanodes are not fully loaded with replication commands simultaneously, so we may want to impose a limit of half that number, with a factor of 0.5, eg 20 * 100 * 0.5 = 1k pending replications.
+For example, if each Datanode can queue 20 replication commands, and there are 100 nodes in the cluster, then the natural limit is 20 * 100. However, that assumes that commands are queued evenly across all Datanodes, which is unlikely. With a global limit we would prefer that all Datanodes are not fully loaded with replication commands simultaneously, so we may want to impose a limit of half that number, with a factor of 0.5, eg 20 \* 100 \* 0.5 = 1k pending replications.
 
 At one extreme this would result in all Datanodes in the cluster having half their maximum tasks queued, but in practice, some DNs are likely to be at their limit while others have zero or less than half queued.
 
@@ -277,11 +278,11 @@ Container replica deletes tend to be targeted to a single node, and the Datanode
 
 Defaults are given in brackets after the parameter.
 
-* `hdds.scm.replication.Datanode.replication.limit`  - (20) Total number of replication commands that can be queued on a Datanode. The limit is made up of number_of_replication_commands + reconstruction_weight * number_of_reconstruction_commands
-* `hdds.scm.replication.Datanode.reconstruction.weight` - (3) The weight to apply to multiple reconstruction commands before adding to the Datanode.replication.limit.
-* `hdds.scm.replication.Datanode.delete.container.limit` - (40) The total number of delete container commands to queue on a given Datanode.
+* `hdds.scm.replication.datanode.replication.limit`  - (20) Total number of replication commands that can be queued on a Datanode. The limit is made up of number_of_replication_commands + reconstruction_weight * number_of_reconstruction_commands
+* `hdds.scm.replication.datanode.reconstruction.weight` - (3) The weight to apply to multiple reconstruction commands before adding to the Datanode.replication.limit.
+* `hdds.scm.replication.datanode.delete.container.limit` - (40) The total number of delete container commands to queue on a given Datanode.
 * `hdds.scm.replication.inflight.limit.factor` - (0.75) The overall replication task limit on a cluster is the number of healthy nodes, times the Datanode.replication.limit. This factor, which should be between zero and 1, scales that limit down to reduce the overall number of replicas pending creation on the cluster. A setting of zero disables global limit checking. A setting of 1 effectively disables it, by making the limit equal to the above equation. However if there are many decommissioning nodes on the cluster, the decommission nodes will have a higher than normal limit, so the setting of 1 may still provide some limit in extreme circumstances.
-* `hdds.Datanode.replication.outofservice.limit.factor` - (2.0) When a Datanode is decommissioning its replication thread pool (hdds.Datanode.replication.streams.limit (10)) is multiplied by this factor to allocate more threads for replication . On SCM, the limit for any Datanode which is not IN_SERVICE (ie decommission or maintenance) is also increased by the same factor. This allows the node to dedicate more resources to replication as it will not be used to writes and will be reduced in priority for reads.
+* `hdds.datanode.replication.outofservice.limit.factor` - (2.0) When a Datanode is decommissioning its replication thread pool (`hdds.datanode.replication.streams.limit (10)`) is multiplied by this factor to allocate more threads for replication . On SCM, the limit for any Datanode which is not IN_SERVICE (ie decommission or maintenance) is also increased by the same factor. This allows the node to dedicate more resources to replication as it will not be used to writes and will be reduced in priority for reads.
 * `hdds.scm.replication.event.timeout` - (300 seconds) The amount of time SCM allows for a task scheduled on a Datanode to complete. After this duration, the Datanode will discard the command and SCM will assume it has been lost and schedule another if still relevant.
 
 ## Future Ideas
